@@ -53,8 +53,18 @@ def skills_analyze(code: str, days: int = 500, market: str = "a",
     from src.memory import record_stock_lookup
     record_stock_lookup(code)
 
-    # 2. 运行所有技能
-    skill_results = skill_mgr.run_all(recent_df, code)
+    # 1.5 技能配置：开关 / 启停 / 融合参数 / 置信度阈值
+    from src.webui import services
+    scfg = services.get_skills_config()
+    if not scfg.get("enabled", True):
+        return {"action": "hold", "confidence": 0.4, "disabled": True,
+                "reason": "技能引擎已关闭", "code": code}
+    from src.skills import SkillRegistry
+    switches = scfg.get("skill_switches", {})
+    active_names = [s.name for s in SkillRegistry.list_all() if switches.get(s.name, True)]
+
+    # 2. 运行启用的技能
+    skill_results = skill_mgr.run_selected(recent_df, active_names, code)
 
     # 3. 本地增强策略引擎
     from src.agent.local_fusion import LocalFusionEngine
@@ -83,7 +93,10 @@ def skills_analyze(code: str, days: int = 500, market: str = "a",
     except Exception:
         pass
 
-    engine = LocalFusionEngine()
+    # 融合引擎参数 + 技能信号置信度阈值（低于阈值的 buy/sell 不参与打分）
+    fusion_cfg = dict(scfg.get("fusion") or {})
+    fusion_cfg["confidence_threshold"] = scfg.get("confidence_threshold", 0.0)
+    engine = LocalFusionEngine(config=fusion_cfg)
     return engine.analyze(
         skill_results=skill_results,
         rule_decision=rule_decision,
@@ -143,8 +156,13 @@ def llm_analyze(code: str, days: int = 500, api_key: str = None,
     from src.memory import record_stock_lookup
     record_stock_lookup(code)
 
-    # 2. 运行所有技能
-    skill_results = skill_mgr.run_all(recent_df, code)
+    # 2. 运行启用的技能（与本地分析共用 skill_switches 配置）
+    from src.webui import services
+    scfg = services.get_skills_config()
+    switches = scfg.get("skill_switches", {})
+    from src.skills import SkillRegistry
+    active_names = [s.name for s in SkillRegistry.list_all() if switches.get(s.name, True)]
+    skill_results = skill_mgr.run_selected(recent_df, active_names, code)
 
     # 3. 收集指标快照
     last = recent_df.iloc[-1]

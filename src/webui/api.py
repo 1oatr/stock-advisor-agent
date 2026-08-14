@@ -189,6 +189,28 @@ def config_skills_put():
     return jsonify(services.save_skills_config(data.get("params") or data))
 
 
+@api.route("/config/skills/reset", methods=["POST"])
+def config_skills_reset():
+    return jsonify(services.reset_skills_config())
+
+
+@api.route("/config/rl", methods=["GET"])
+def config_rl_get():
+    return jsonify(services.get_rl_config())
+
+
+@api.route("/config/rl", methods=["PUT"])
+def config_rl_put():
+    data = request.get_json(silent=True) or {}
+    params = data.get("params") or data
+    return jsonify(services.save_rl_config(params))
+
+
+@api.route("/config/rl/reset", methods=["POST"])
+def config_rl_reset():
+    return jsonify(services.reset_rl_config())
+
+
 # ============================================================================
 # 异步 Job（RL 训练 / 预测 / 聊天）
 # ============================================================================

@@ -458,6 +458,15 @@ body {
   text-align: right;
 }
 .edit-field input:focus { outline: none; border-color: var(--accent); }
+.edit-group {
+  margin: 10px 0 6px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--border);
+  color: var(--text-dim);
+  font-size: 11px;
+  font-weight: 700;
+}
+.check-line { display: flex; align-items: center; gap: 6px; color: var(--text); }
 
 /* LLM 配置弹窗：文本字段加宽、左对齐 */
 .llm-field input { width: 250px; text-align: left; }

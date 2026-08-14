@@ -222,10 +222,12 @@ class JobManager:
             def cancel_callback():
                 return job.cancel_event.is_set()
 
+            from src.webui import services
             result = train_model(
                 code=code, timesteps=timesteps,
                 extra_callbacks=[progress_cb],
                 cancel_event=cancel_callback,
+                config=services.rl_train_config(),
             )
 
             if job.cancel_event.is_set():

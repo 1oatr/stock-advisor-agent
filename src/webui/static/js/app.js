@@ -223,6 +223,9 @@
   document.getElementById('btn-edit-skills').addEventListener('click', () => {
     openEditModal('skills');
   });
+  document.getElementById('btn-edit-rl').addEventListener('click', () => {
+    openEditModal('rl');
+  });
 
   // ═══ 规则编辑弹窗 ═══
   const modal = document.getElementById('edit-modal');
@@ -244,21 +247,73 @@
     { key: 'kelly_odds', label: '凯利赔率 b', desc: '止盈20%/止损5% → b=4', step: 0.5 },
     { key: 'max_position', label: '单标的最大仓位', desc: '上限比例 0.20', step: 0.01 },
   ];
+  const SKILL_LABELS = {
+    candlestick_patterns: 'K线形态', rsi_divergence: 'RSI背离', macd_divergence: 'MACD背离',
+    breakout_analysis: '突破分析', support_resistance: '支撑阻力', momentum_analysis: '动量分析',
+    volume_analysis: '量价分析', volatility_analysis: '波动率', fund_flow_analysis: '资金流向',
+    volatility_regime: '波动率区间', multi_timeframe_consensus: '多周期共振',
+  };
   const SKILLS_FIELDS = [
-    { key: 'enabled', label: '技能引擎开关', desc: 'true/false', type: 'check' },
-    { key: 'confidence_threshold', label: '信号置信度阈值', desc: '低于则忽略信号', step: 0.05 },
+    { type: 'group', label: '—— 基础开关 ——' },
+    { key: 'enabled', label: '技能引擎开关', desc: '关闭后技能分析停用', type: 'check' },
+    { key: 'confidence_threshold', label: '信号置信度阈值', desc: '低于此置信度的买卖信号不参与打分', step: 0.05 },
+    { type: 'group', label: '—— 融合引擎参数 ——' },
+    { key: 'fusion__cluster_base', label: '信号基础分', desc: '单个信号的基础分数', step: 0.05 },
+    { key: 'fusion__cluster_multiplier', label: '信号共振强度', desc: '每多一个同向信号的指数乘数', step: 0.05 },
+    { key: 'fusion__contradiction_penalty', label: '矛盾信号折扣', desc: '多空矛盾时双方降权系数', step: 0.05 },
+    { key: 'fusion__rule_agree_bonus', label: '规则一致加成', desc: '规则与技能同向时的置信度乘数', step: 0.05 },
+    { key: 'fusion__rule_disagree_penalty', label: '规则相反折扣', desc: '规则与技能相反时的折扣系数', step: 0.05 },
+    { key: 'fusion__bear_cap', label: '熊市置信度上限', desc: '熊市最高置信度', step: 0.05 },
+    { key: 'fusion__min_confidence', label: '最低置信度', desc: '最终置信度低于此值转持有', step: 0.05 },
+    { type: 'group', label: '—— 单个技能启停 ——' },
+  ].concat(Object.keys(SKILL_LABELS).map(name => ({
+    key: 'skill__' + name, label: SKILL_LABELS[name], type: 'checkbox',
+  })));
+  const RL_FIELDS = [
+    { type: 'group', label: '—— 训练步数 ——' },
+    { key: 'timesteps_full', label: '全量训练步数', desc: '首次/重训默认步数', step: 10000 },
+    { key: 'timesteps_incremental', label: '增量微调步数', desc: '15 天内增量更新步数', step: 1000 },
+    { type: 'group', label: '—— 生命周期 ——' },
+    { key: 'update_interval_days', label: '增量窗口天数', desc: '距上次训练多少天内走增量微调', step: 1 },
+    { key: 'delete_stale_days', label: '过期删除天数', desc: '超过则删除旧模型全量重训', step: 1 },
+    { key: 'min_data_rows', label: '最少数据行', desc: '训练所需最少行数', step: 10 },
+    { type: 'group', label: '—— 环境参数（改观察窗口需重训）——' },
+    { key: 'window', label: '观察窗口天数', desc: '观测特征窗口，改后旧模型失效', step: 5 },
+    { key: 'min_hold_days', label: '最短持有天数', desc: '持仓不足卖出有惩罚', step: 1 },
+    { key: 'max_hold_days', label: '最长持有天数', desc: '超时强制平仓', step: 1 },
+    { key: 'commission', label: '佣金率', desc: '单边手续费比例', step: 0.0001 },
+    { key: 'stamp_tax', label: '印花税率', desc: '卖出印花税比例', step: 0.0001 },
+    { key: 'limit_pct', label: '涨跌停限制', desc: '±限制比例', step: 0.01 },
+    { type: 'group', label: '—— PPO 超参 ——' },
+    { key: 'learning_rate', label: '学习率', desc: 'PPO 学习率', step: 0.0001 },
+    { key: 'gamma', label: '折扣因子 γ', desc: 'PPO gamma', step: 0.01 },
+    { key: 'gae_lambda', label: 'GAE λ', desc: 'PPO gae_lambda', step: 0.01 },
+    { key: 'clip_range', label: '裁剪范围', desc: 'PPO clip_range', step: 0.05 },
+    { key: 'ent_coef', label: '熵系数', desc: 'PPO ent_coef', step: 0.01 },
+    { key: 'batch_size', label: '批大小', desc: 'PPO batch_size', step: 8 },
+    { key: 'n_steps', label: 'n_steps', desc: 'PPO n_steps', step: 256 },
   ];
+
+  const MODE_META = {
+    rules:  { title: '✏️ 规则引擎参数', get: '/config/rules',  put: '/config/rules',  reset: '/config/rules/reset' },
+    skills: { title: '✏️ 技能分析参数', get: '/config/skills', put: '/config/skills', reset: '/config/skills/reset' },
+    rl:     { title: '🎮 RL 训练参数', get: '/config/rl',     put: '/config/rl',     reset: '/config/rl/reset' },
+  };
 
   function openEditModal(mode) {
     modalMode = mode;
     modalDirty = false;
-    modalTitle.textContent = mode === 'rules' ? '✏️ 规则引擎参数' : '✏️ 技能分析参数';
-    const fields = mode === 'rules' ? RULES_FIELDS : SKILLS_FIELDS;
+    modalTitle.textContent = MODE_META[mode].title;
+    const fields = mode === 'rules' ? RULES_FIELDS : (mode === 'skills' ? SKILLS_FIELDS : RL_FIELDS);
 
-    const load = mode === 'rules' ? API.get('/config/rules') : API.get('/config/skills');
-    load.then(cfg => {
+    API.get(MODE_META[mode].get).then(cfg => {
+      // 扁平化嵌套配置（fusion__xx / skill__yy），便于字段取值
+      const flat = Object.assign({}, cfg);
+      Object.entries(cfg.fusion || {}).forEach(([k, v]) => { flat['fusion__' + k] = v; });
+      Object.entries(cfg.skill_switches || {}).forEach(([k, v]) => { flat['skill__' + k] = v; });
       modalBody.innerHTML = fields.map(f => {
-        let val = cfg[f.key];
+        if (f.type === 'group') return `<div class="edit-group">${f.label}</div>`;
+        const val = flat[f.key];
         if (f.type === 'check') {
           const checked = !!val;
           return `<div class="edit-field"><label>${f.label}<div class="field-desc">${f.desc || ''}</div></label>
@@ -266,6 +321,11 @@
               <option value="true" ${checked ? 'selected' : ''}>开启</option>
               <option value="false" ${!checked ? 'selected' : ''}>关闭</option>
             </select></div>`;
+        }
+        if (f.type === 'checkbox') {
+          const checked = !!val;
+          return `<div class="edit-field"><label>${f.label}<div class="field-desc">${f.desc || ''}</div></label>
+            <label class="check-line"><input type="checkbox" data-key="${f.key}" ${checked ? 'checked' : ''}> 启用</label></div>`;
         }
         const num = (val == null ? '' : val);
         return `<div class="edit-field"><label>${f.label}<div class="field-desc">${f.desc || ''}</div></label>
@@ -286,19 +346,28 @@
 
   document.getElementById('btn-modal-save').addEventListener('click', async () => {
     const params = {};
+    const fusion = {};
+    const switches = {};
     modalBody.querySelectorAll('[data-key]').forEach(el => {
       const key = el.dataset.key;
-      if (el.tagName === 'SELECT') params[key] = el.value === 'true';
-      else params[key] = parseFloat(el.value);
+      let val;
+      if (el.tagName === 'SELECT') val = el.value === 'true';
+      else if (el.type === 'checkbox') val = el.checked;
+      else val = parseFloat(el.value);
+      if (key.startsWith('fusion__')) fusion[key.slice(8)] = val;
+      else if (key.startsWith('skill__')) switches[key.slice(7)] = val;
+      else params[key] = val;
     });
+    if (modalMode === 'skills') {
+      params.fusion = fusion;
+      params.skill_switches = switches;
+    }
+    const msg = modalMode === 'rules' ? '✅ 规则引擎参数已保存（下次分析生效）'
+      : modalMode === 'skills' ? '✅ 技能分析参数已保存'
+      : '✅ RL 训练参数已保存（下次训练生效）';
     try {
-      if (modalMode === 'rules') {
-        await API.put('/config/rules', { params });
-        window.Chat && window.Chat.appendMsg('sys', '✅ 规则引擎参数已保存（下次分析生效）');
-      } else {
-        await API.put('/config/skills', { params });
-        window.Chat && window.Chat.appendMsg('sys', '✅ 技能分析参数已保存');
-      }
+      await API.put(MODE_META[modalMode].put, { params });
+      window.Chat && window.Chat.appendMsg('sys', msg);
       modal.classList.add('hidden');
       // 清前端缓存，确保重新拉取新参数下的分析结果
       API.clearCache();
@@ -309,12 +378,14 @@
   });
 
   document.getElementById('btn-modal-reset').addEventListener('click', async () => {
-    if (modalMode === 'rules') {
-      await API.post('/config/rules/reset');
-      window.Chat && window.Chat.appendMsg('sys', '↩️ 规则参数已恢复默认');
+    try {
+      await API.post(MODE_META[modalMode].reset);
+      window.Chat && window.Chat.appendMsg('sys', '↩️ 参数已恢复默认');
       modal.classList.add('hidden');
       API.clearCache();
       refreshAllCards();
+    } catch (e) {
+      window.Chat && window.Chat.appendMsg('sys', '❌ 恢复默认失败: ' + e.message);
     }
   });
 
@@ -410,7 +481,13 @@
     const text = document.getElementById('train-progress-text');
 
     try {
-      const res = await API.submitJob('train', { code, timesteps: 50000 });
+      // 训练步数优先取 RL 配置的 timesteps_full，失败则用默认 50000
+      let timesteps = 50000;
+      try {
+        const rlCfg = await API.get('/config/rl');
+        timesteps = Math.round(rlCfg.timesteps_full) || timesteps;
+      } catch (e) { /* 保持默认 */ }
+      const res = await API.submitJob('train', { code, timesteps });
       if (res.error && res.code === 'conflict') {
         text.textContent = `该股票已在训练中 (job ${res.job_id})`;
         // 订阅已存在 job

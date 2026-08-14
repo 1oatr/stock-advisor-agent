@@ -20,14 +20,26 @@ from src.skills.base import SkillResult, SIGNAL_BUY, SIGNAL_SELL, SIGNAL_HOLD
 
 logger = logging.getLogger(__name__)
 
-# 信号簇配置
-CLUSTER_BASE = 0.25           # 单个信号的基础分数
-CLUSTER_MULTIPLIER = 1.45     # 每多一个信号的指数乘数
-CONTRADICTION_PENALTY = 0.55  # 有矛盾信号时的折扣系数
-RULE_CROSS_VALIDATION_AGREE = 1.20   # 规则与技能一致 → 置信度×1.20
-RULE_CROSS_VALIDATION_DISAGREE = 0.55  # 规则与技能相反 → 置信度×0.55
-BEAR_MARKET_CONFIDENCE_CAP = 0.60      # 熊市最高置信度
-MIN_CONFIDENCE_FOR_SIGNAL = 0.35       # 低于此值 → hold
+# 信号簇配置（可被 LocalFusionEngine(config=...) 覆盖，默认值供配置层复用）
+LOCAL_FUSION_DEFAULTS = {
+    "cluster_base": 0.25,           # 单个信号的基础分数
+    "cluster_multiplier": 1.45,     # 每多一个信号的指数乘数（共振强度）
+    "contradiction_penalty": 0.55,  # 有矛盾信号时的折扣系数
+    "rule_agree_bonus": 1.20,       # 规则与技能一致 → 置信度×1.20
+    "rule_disagree_penalty": 0.55,  # 规则与技能相反 → 置信度×0.55
+    "bear_cap": 0.60,               # 熊市最高置信度
+    "min_confidence": 0.35,         # 最终置信度低于此值 → hold
+    "confidence_threshold": 0.0,    # 技能信号置信度过滤（低于此值的 buy/sell 不参与打分）
+}
+
+# 兼容旧引用（模块级常量）
+CLUSTER_BASE = LOCAL_FUSION_DEFAULTS["cluster_base"]
+CLUSTER_MULTIPLIER = LOCAL_FUSION_DEFAULTS["cluster_multiplier"]
+CONTRADICTION_PENALTY = LOCAL_FUSION_DEFAULTS["contradiction_penalty"]
+RULE_CROSS_VALIDATION_AGREE = LOCAL_FUSION_DEFAULTS["rule_agree_bonus"]
+RULE_CROSS_VALIDATION_DISAGREE = LOCAL_FUSION_DEFAULTS["rule_disagree_penalty"]
+BEAR_MARKET_CONFIDENCE_CAP = LOCAL_FUSION_DEFAULTS["bear_cap"]
+MIN_CONFIDENCE_FOR_SIGNAL = LOCAL_FUSION_DEFAULTS["min_confidence"]
 
 
 class LocalFusionEngine:
@@ -45,8 +57,9 @@ class LocalFusionEngine:
         )
     """
 
-    def __init__(self):
+    def __init__(self, config: Optional[dict] = None):
         self.analysis_count = 0
+        self._cfg = {**LOCAL_FUSION_DEFAULTS, **(config or {})}
 
     # =====================================================================
     # 主入口
@@ -99,7 +112,7 @@ class LocalFusionEngine:
         confidence = min(raw_confidence, market_cap)
 
         # 如果最小置信度都不够
-        if confidence < MIN_CONFIDENCE_FOR_SIGNAL:
+        if confidence < self._cfg["min_confidence"]:
             action = SIGNAL_HOLD
             confidence = 0.40
 
@@ -156,7 +169,14 @@ class LocalFusionEngine:
         buy_signals = []
         sell_signals = []
 
+        conf_thr = self._cfg.get("confidence_threshold", 0.0)
+
         for r in skill_results:
+            # 置信度低于阈值的方向信号不参与打分（视为弱信号）
+            if (conf_thr > 0.0
+                    and r.signal in (SIGNAL_BUY, SIGNAL_SELL, "strong_buy", "strong_sell")
+                    and r.confidence < conf_thr):
+                continue
             w = r.confidence * (r.strength + 0.3)
             if r.signal in (SIGNAL_BUY, "strong_buy"):
                 bonus = 1.3 if r.signal == "strong_buy" else 1.0
@@ -169,8 +189,8 @@ class LocalFusionEngine:
         n_sell = len(sell_signals)
 
         # 指数级簇加分
-        buy_score = CLUSTER_BASE * (CLUSTER_MULTIPLIER ** (n_buy - 1)) if n_buy > 0 else 0.0
-        sell_score = CLUSTER_BASE * (CLUSTER_MULTIPLIER ** (n_sell - 1)) if n_sell > 0 else 0.0
+        buy_score = self._cfg["cluster_base"] * (self._cfg["cluster_multiplier"] ** (n_buy - 1)) if n_buy > 0 else 0.0
+        sell_score = self._cfg["cluster_base"] * (self._cfg["cluster_multiplier"] ** (n_sell - 1)) if n_sell > 0 else 0.0
 
         # 叠加信号强度
         if n_buy > 0:
@@ -224,9 +244,8 @@ class LocalFusionEngine:
         # 2买 vs 2卖 → 2/2=1.0 → 重罚
         ratio = min(n_buy, n_sell) / max(n_buy, n_sell)
 
-        # 惩罚 = 1 - (比例 × 0.45)
-        # 最大惩罚系数 = 1 - 1.0*0.45 = 0.55
-        factor = 1.0 - ratio * (1.0 - CONTRADICTION_PENALTY)
+        # 惩罚 = 1 - (比例 × (1 - penalty))
+        factor = 1.0 - ratio * (1.0 - self._cfg["contradiction_penalty"])
 
         return max(factor, 0.30)  # 不低于 0.30
 
@@ -248,11 +267,11 @@ class LocalFusionEngine:
         sell_factor = 1.0
 
         if rule_signal == "buy":
-            buy_factor *= RULE_CROSS_VALIDATION_AGREE
-            sell_factor *= RULE_CROSS_VALIDATION_DISAGREE
+            buy_factor *= self._cfg["rule_agree_bonus"]
+            sell_factor *= self._cfg["rule_disagree_penalty"]
         elif rule_signal == "sell":
-            sell_factor *= RULE_CROSS_VALIDATION_AGREE
-            buy_factor *= RULE_CROSS_VALIDATION_DISAGREE
+            sell_factor *= self._cfg["rule_agree_bonus"]
+            buy_factor *= self._cfg["rule_disagree_penalty"]
         # hold → 不做调整（规则也看不清）
 
         # 规则强度弱时减轻调整幅度
@@ -274,7 +293,7 @@ class LocalFusionEngine:
         caps = {
             "bull": 1.0,
             "range": 0.85,
-            "bear": BEAR_MARKET_CONFIDENCE_CAP,
+            "bear": self._cfg["bear_cap"],
         }
         return caps.get(market_state, 0.80)
 

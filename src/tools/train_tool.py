@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 def train_model(code: str, timesteps: int = 200000, update: bool = False,
                 model_dir: str = "models", extra_callbacks: list = None,
-                cancel_event=None) -> dict:
+                cancel_event=None, config: dict = None) -> dict:
     """训练或增量更新 RL 模型
 
     数据管线: 个股日线 → 大盘指数 → 资金流向 → 清洗 → 外部增强 → 指标计算 → 训练
@@ -98,7 +98,8 @@ def train_model(code: str, timesteps: int = 200000, update: bool = False,
     from src.rl.train import train_single_stock
     result = train_single_stock(df, code, timesteps=timesteps, model_dir=model_dir,
                                 extra_callbacks=extra_callbacks,
-                                cancel_event=cancel_event)
+                                cancel_event=cancel_event,
+                                config=config)
     result["warnings"] = warnings
     result["data_sources"] = data_sources
     return result

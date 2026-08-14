@@ -873,7 +873,7 @@ def get_rl_prediction(code: str, force_refresh: bool = False) -> dict:
             return cached
     from src.tools.rl_tool import get_rl_prediction as _rl
     try:
-        result = _rl(symbol)
+        result = _rl(symbol, window=int(get_rl_config().get("window", 60)))
         result["code"] = code
         result["is_trained"] = not result.get("untrained", True)
         result["market"] = "a"
@@ -1046,9 +1046,50 @@ DEFAULT_RULES_CONFIG = {
     "max_position": 0.20,
 }
 
-DEFAULT_SKILLS_CONFIG = {
-    "enabled": True,
-    "confidence_threshold": 0.50,
+def _skill_names() -> list:
+    """动态获取已注册技能名清单"""
+    from src.skills import init_skills, SkillRegistry
+    try:
+        init_skills()
+        return [s.name for s in SkillRegistry.list_all()]
+    except Exception:
+        return []
+
+
+def _default_skills_config() -> dict:
+    """默认技能配置（fusion 默认值取自 LocalFusionEngine 常量，避免漂移）"""
+    from src.agent.local_fusion import LOCAL_FUSION_DEFAULTS
+    return {
+        "enabled": True,
+        "confidence_threshold": 0.50,
+        "fusion": dict(LOCAL_FUSION_DEFAULTS),
+        "skill_switches": {name: True for name in _skill_names()},
+    }
+
+# RL 训练/环境参数（扁平视图，前端可直接编辑；持久化到 data/rl_config.json）
+DEFAULT_RL_CONFIG = {
+    # 训练步数
+    "timesteps_full": 200_000,
+    "timesteps_incremental": 10_000,
+    # 生命周期
+    "update_interval_days": 15,
+    "delete_stale_days": 60,
+    "min_data_rows": 120,
+    # 环境参数
+    "window": 60,
+    "min_hold_days": 3,
+    "max_hold_days": 30,
+    "commission": 0.00025,
+    "stamp_tax": 0.001,
+    "limit_pct": 0.10,
+    # PPO 超参
+    "learning_rate": 0.0003,
+    "gamma": 0.99,
+    "gae_lambda": 0.95,
+    "clip_range": 0.2,
+    "ent_coef": 0.01,
+    "batch_size": 64,
+    "n_steps": 2048,
 }
 
 
@@ -1097,12 +1138,167 @@ def reset_rules_config() -> dict:
     return {"ok": True, "rules": dict(DEFAULT_RULES_CONFIG)}
 
 
+def _skills_override_path():
+    from pathlib import Path
+    return Path(__file__).resolve().parent.parent.parent / "data" / "skills_config.json"
+
+
 def get_skills_config() -> dict:
-    return dict(DEFAULT_SKILLS_CONFIG)
+    """读取当前生效的技能配置（默认 + override 合并）"""
+    import json
+    cfg = _default_skills_config()
+    path = _skills_override_path()
+    if path.exists():
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                override = json.load(f)
+            if "enabled" in override:
+                cfg["enabled"] = bool(override["enabled"])
+            if "confidence_threshold" in override and _safe_float(override["confidence_threshold"]) is not None:
+                cfg["confidence_threshold"] = float(override["confidence_threshold"])
+            if isinstance(override.get("fusion"), dict):
+                for k, v in override["fusion"].items():
+                    if k in cfg["fusion"] and _safe_float(v) is not None:
+                        cfg["fusion"][k] = float(v)
+            if isinstance(override.get("skill_switches"), dict):
+                for k, v in override["skill_switches"].items():
+                    if k in cfg["skill_switches"]:
+                        cfg["skill_switches"][k] = bool(v)
+        except (json.JSONDecodeError, IOError):
+            pass
+    return cfg
 
 
 def save_skills_config(params: dict) -> dict:
-    return {"ok": True, "skills": dict(DEFAULT_SKILLS_CONFIG)}
+    """保存技能配置到 data/skills_config.json（白名单校验，真正生效）"""
+    import json
+    path = _skills_override_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    default = _default_skills_config()
+    override = {}
+    if path.exists():
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                override = json.load(f)
+        except (json.JSONDecodeError, IOError):
+            override = {}
+    if "enabled" in params:
+        override["enabled"] = bool(params["enabled"])
+    if "confidence_threshold" in params and _safe_float(params["confidence_threshold"]) is not None:
+        override["confidence_threshold"] = float(params["confidence_threshold"])
+    fusion = params.get("fusion")
+    if isinstance(fusion, dict):
+        base_fusion = dict(default["fusion"])
+        for k, v in fusion.items():
+            if k in base_fusion and _safe_float(v) is not None:
+                base_fusion[k] = float(v)
+        override["fusion"] = base_fusion
+    switches = params.get("skill_switches")
+    if isinstance(switches, dict):
+        base_sw = dict(default["skill_switches"])
+        for k, v in switches.items():
+            if k in base_sw:
+                base_sw[k] = bool(v)
+        override["skill_switches"] = base_sw
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(override, f, ensure_ascii=False, indent=2)
+    return {"ok": True, "skills": get_skills_config()}
+
+
+def reset_skills_config() -> dict:
+    """重置技能配置为默认"""
+    path = _skills_override_path()
+    if path.exists():
+        path.unlink()
+    return {"ok": True, "skills": _default_skills_config()}
+
+
+# ============================================================================
+# RL 训练/环境参数编辑（持久化 data/rl_config.json）
+# ============================================================================
+
+def _rl_override_path():
+    from pathlib import Path
+    return Path(__file__).resolve().parent.parent.parent / "data" / "rl_config.json"
+
+
+def get_rl_config() -> dict:
+    """读取当前生效的 RL 参数（默认 + override 合并，扁平键）"""
+    import json
+    cfg = dict(DEFAULT_RL_CONFIG)
+    path = _rl_override_path()
+    if path.exists():
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                override = json.load(f)
+            cfg.update({k: v for k, v in override.items() if k in DEFAULT_RL_CONFIG})
+        except (json.JSONDecodeError, IOError):
+            pass
+    return cfg
+
+
+def save_rl_config(params: dict) -> dict:
+    """保存 RL 参数到 data/rl_config.json（白名单校验）"""
+    import json
+    path = _rl_override_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    override = {}
+    if path.exists():
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                override = json.load(f)
+        except (json.JSONDecodeError, IOError):
+            override = {}
+    allowed = set(DEFAULT_RL_CONFIG.keys())
+    cleaned = {}
+    for k, v in params.items():
+        if k in allowed and _safe_float(v) is not None:
+            cleaned[k] = float(v)
+    override.update(cleaned)
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(override, f, ensure_ascii=False, indent=2)
+    return {"ok": True, "rl": cleaned}
+
+
+def reset_rl_config() -> dict:
+    """重置 RL 参数为默认"""
+    path = _rl_override_path()
+    if path.exists():
+        path.unlink()
+    return {"ok": True, "rl": dict(DEFAULT_RL_CONFIG)}
+
+
+def rl_train_config() -> dict:
+    """扁平 RL 配置 → train_single_stock 使用的嵌套 config
+
+    Returns:
+        {timesteps_full, timesteps_incremental, update_interval_days,
+         delete_stale_days, min_data_rows, ppo_kwargs{...}, window,
+         min_hold_days, max_hold_days, commission, stamp_tax, limit_pct}
+    """
+    cfg = get_rl_config()
+    return {
+        "timesteps_full": cfg["timesteps_full"],
+        "timesteps_incremental": cfg["timesteps_incremental"],
+        "update_interval_days": cfg["update_interval_days"],
+        "delete_stale_days": cfg["delete_stale_days"],
+        "min_data_rows": cfg["min_data_rows"],
+        "window": cfg["window"],
+        "min_hold_days": cfg["min_hold_days"],
+        "max_hold_days": cfg["max_hold_days"],
+        "commission": cfg["commission"],
+        "stamp_tax": cfg["stamp_tax"],
+        "limit_pct": cfg["limit_pct"],
+        "ppo_kwargs": {
+            "learning_rate": cfg["learning_rate"],
+            "gamma": cfg["gamma"],
+            "gae_lambda": cfg["gae_lambda"],
+            "clip_range": cfg["clip_range"],
+            "ent_coef": cfg["ent_coef"],
+            "batch_size": cfg["batch_size"],
+            "n_steps": cfg["n_steps"],
+        },
+    }
 
 
 # ============================================================================

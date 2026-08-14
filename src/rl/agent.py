@@ -27,9 +27,11 @@ class SingleStockAgent:
         # → {"action": "buy", "confidence": 0.72, "untrained": False}
     """
 
-    def __init__(self, model_dir: str = "models", cache_models: bool = True):
+    def __init__(self, model_dir: str = "models", cache_models: bool = True,
+                 window: int = 60):
         self.model_dir = model_dir
         self.cache_models = cache_models
+        self.window = window
         self._model_cache: Dict[str, any] = {}         # code → PPO model
         self._freshness_cache: Dict[str, Dict] = {}    # code → freshness info
 
@@ -68,7 +70,7 @@ class SingleStockAgent:
 
         # 创建环境并运行推理（eval_mode 确定性起始）
         try:
-            env = SingleStockEnv(df, code=code)
+            env = SingleStockEnv(df, code=code, window=self.window)
             obs, _ = env.reset(options={"eval_mode": True})
 
             # 运行完整 episode 获取最终动作

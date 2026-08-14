@@ -10,7 +10,7 @@ from src.data.indicators import add_all_indicators
 from src.data.cleaning import DataCleaner
 
 
-def get_rl_prediction(code: str) -> dict:
+def get_rl_prediction(code: str, window: int = 60) -> dict:
     """获取 RL 模型对单只股票的买卖预测
 
     Args:
@@ -59,7 +59,7 @@ def get_rl_prediction(code: str) -> dict:
         if df.empty or len(df) < 30:
             return {"code": code, "action": "hold", "confidence": 0.5, "untrained": True, "reason": "数据不足"}
 
-        agent = SingleStockAgent()
+        agent = SingleStockAgent(window=window)
         result = agent.predict(df.tail(120), code)
         result["code"] = code
         return result

@@ -21,6 +21,14 @@ from .single_env import SingleStockEnv, DEFAULT_FEATURES
 
 logger = logging.getLogger(__name__)
 
+# 可从 config 覆盖的环境参数（SingleStockEnv.__init__）
+_ENV_PARAMS = ("window", "min_hold_days", "max_hold_days", "commission", "stamp_tax", "limit_pct")
+
+
+def _extract_env_kwargs(config: dict) -> dict:
+    """从训练 config 提取环境参数，供 SingleStockEnv 使用"""
+    return {k: config[k] for k in _ENV_PARAMS if config.get(k) is not None}
+
 # 默认配置
 DEFAULT_CONFIG = {
     "model_dir": "models",
@@ -163,9 +171,11 @@ def _full_train(
         logger.info(f"{code}: 训练集 {len(train_df)} 行, 验证集 {len(val_df)} 行")
 
         # 创建环境（val_env 用 Monitor 包装，EvalCallback 依赖它正确统计）
-        train_env = SingleStockEnv(train_df, code=code)
-        val_env = Monitor(SingleStockEnv(val_df, code=code))
-        ppo_kwargs = config.get("ppo_kwargs", DEFAULT_CONFIG["ppo_kwargs"])
+        env_kwargs = _extract_env_kwargs(config)
+        train_env = SingleStockEnv(train_df, code=code, **env_kwargs)
+        val_env = Monitor(SingleStockEnv(val_df, code=code, **env_kwargs))
+        # PPO 超参深合并：config 只给部分键时保留默认值
+        ppo_kwargs = {**DEFAULT_CONFIG["ppo_kwargs"], **(config.get("ppo_kwargs") or {})}
 
         # 早停回调：连续8次无改善即停止（放宽到8次，配合修复后的评估）
         # min_evals=15 确保至少跑 37.5% 的评估后才考虑早停
@@ -274,7 +284,7 @@ def _incremental_train(
         model = PPO.load(model_path)
 
         # 用新数据创建环境
-        env = SingleStockEnv(df, code=code)
+        env = SingleStockEnv(df, code=code, **_extract_env_kwargs(config))
         model.set_env(env)
 
         # 微调（+ 可选进度回调）

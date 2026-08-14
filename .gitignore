@@ -9,6 +9,8 @@ env/
 
 # ── 运行时数据与隐私（本地保留，不上传）────
 data/llm_config.json
+data/rl_config.json
+data/skills_config.json
 data/interested_stocks.json
 data/watchlist.json
 data/rules_override.json
