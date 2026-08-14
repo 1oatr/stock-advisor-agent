@@ -1,0 +1,41 @@
+# ── Python ─────────────────────────────────
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+env/
+*.egg-info/
+
+# ── 运行时数据与隐私（本地保留，不上传）────
+data/llm_config.json
+data/interested_stocks.json
+data/watchlist.json
+data/rules_override.json
+data/stock_names_cache.json
+data/patterns/
+data/cache/
+data/logs/
+data/*.csv
+
+# ── RL 模型权重（体积大，可训练再生）──────
+models/
+
+# ── 本地文档（不上传）─────────────────────
+DEVLOG.md
+README01.md
+description.txt
+
+# ── 密钥与凭证 ────────────────────────────
+.env
+.env.*
+*.pem
+*.key
+*.p12
+*.pfx
+
+# ── IDE / 编辑器 ──────────────────────────
+.idea/
+.vscode/
+*.swp
+.DS_Store

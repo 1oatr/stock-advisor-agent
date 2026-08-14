@@ -1,0 +1,13 @@
+akshare>=1.14.0
+pandas>=2.0.0
+numpy>=1.24.0
+pandas-ta>=0.3.14b0
+gymnasium>=0.29.0
+stable-baselines3>=2.3.0
+torch>=2.0.0
+pyyaml>=6.0
+matplotlib>=3.7.0
+click>=8.1.0
+rich>=13.0.0
+openai>=1.0.0  # DeepSeek 兼容 OpenAI API 格式
+flask>=3.0.0   # Web 可视化仪表盘

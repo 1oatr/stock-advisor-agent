@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Stock Advisor — 量化分析仪表盘</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="app">
+
+  <!-- ═══ ① 顶部栏 ═══ -->
+  <header class="topbar">
+    <div class="brand">📊 Stock Advisor</div>
+    <div class="search-box">
+      <input type="text" id="stock-search" placeholder="输入股票名称或代码搜索…"
+             autocomplete="off">
+      <div id="search-suggest" class="suggest-dropdown hidden"></div>
+    </div>
+    <div class="status-chips">
+      <span id="market-chip" class="chip" title="大盘状态">大盘: --</span>
+      <span id="llm-chip" class="chip" title="LLM 状态">LLM: --</span>
+      <button class="btn btn-sm" id="btn-llm-config" title="LLM 配置">⚙️ LLM</button>
+    </div>
+  </header>
+
+  <!-- ═══ 主体：侧边栏 + 主区 ═══ -->
+  <div class="main">
+
+    <!-- ③ 侧边栏：上=股票选择，下=规则说明 -->
+    <aside class="sidebar">
+      <div class="sidebar-top">
+        <div class="list-switcher">
+          <button class="sw-btn" id="prev-list" title="上一个清单">◀</button>
+          <span class="list-name" id="list-name">历史查询</span>
+          <button class="sw-btn" id="next-list" title="下一个清单">▶</button>
+        </div>
+        <div class="stock-list" id="stock-list">
+          <div class="empty-hint">加载中…</div>
+        </div>
+      </div>
+
+    </aside>
+
+    <!-- ② 主区 -->
+    <section class="main-area">
+
+      <!-- ═══ 主页视图（软件介绍） ═══ -->
+      <div id="home-view" class="view hidden">
+        <div class="intro-hero">
+          <div class="intro-title">📊 Stock Advisor</div>
+          <div class="intro-subtitle">A 股量化分析智能体 · 三路融合决策系统</div>
+          <p class="intro-desc">输入自然语言即可获得专业股票分析。LLM 深度解读 + 硬规则引擎 + RL 强化学习三方融合，输出买卖建议与仓位。</p>
+        </div>
+
+        <div class="intro-grid">
+          <div class="intro-card">
+            <div class="intro-card-icon">📈</div>
+            <div class="intro-card-title">K 线图 + 实时指标</div>
+            <div class="intro-card-desc">蜡烛图、均线、成交量、换手率，以及市盈率/量比/市值等 16 项实时指标</div>
+          </div>
+          <div class="intro-card">
+            <div class="intro-card-icon">📐</div>
+            <div class="intro-card-title">规则引擎</div>
+            <div class="intro-card-desc">10 条投票规则 + 止损否决，按趋势/震荡/通道/量价/结构分类，随大盘自适应</div>
+          </div>
+          <div class="intro-card">
+            <div class="intro-card-icon">🔍</div>
+            <div class="intro-card-title">技能分析</div>
+            <div class="intro-card-desc">11 个独立技术分析技能：K线形态、RSI/MACD 背离、突破、动量、资金流向等</div>
+          </div>
+          <div class="intro-card">
+            <div class="intro-card-icon">🧠</div>
+            <div class="intro-card-title">LLM 深度分析</div>
+            <div class="intro-card-desc">DeepSeek 解读技能信号与技术指标，理解信号间的矛盾与印证</div>
+          </div>
+          <div class="intro-card">
+            <div class="intro-card-icon">🎮</div>
+            <div class="intro-card-title">RL 强化学习</div>
+            <div class="intro-card-desc">PPO 智能体从历史数据自主学习买卖策略，含增量更新与自动过期</div>
+          </div>
+          <div class="intro-card">
+            <div class="intro-card-icon">🔗</div>
+            <div class="intro-card-title">三路融合</div>
+            <div class="intro-card-desc">LLM + 规则 + RL 加权融合，输出最终买卖建议与凯利公式仓位</div>
+          </div>
+        </div>
+
+        <div class="intro-howto">
+          <div class="intro-howto-title">💡 快速开始</div>
+          <div class="intro-howto-steps">
+            <div class="howto-step">1. 在<strong>顶部搜索框</strong>输入股票名称或代码（如"茅台"或 600519）</div>
+            <div class="howto-step">2. 或点击<strong>左侧历史查询 / 自选股</strong>中的股票</div>
+            <div class="howto-step">3. 查看 K 线、实时行情与分析卡片</div>
+            <div class="howto-step">4. 在<strong>底部聊天框</strong>输入自然语言提问，如"分析茅台"、"对比茅台和五粮液"</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══ 详情视图（股票页） ═══ -->
+      <div id="detail-view" class="view hidden">
+
+      <!-- 股票头 -->
+      <div class="stock-header">
+        <button class="btn btn-sm" id="btn-back-home" title="返回主页">← 主页</button>
+        <div class="stock-id">
+          <span class="stock-name" id="stock-name">--</span>
+          <span class="stock-code" id="stock-code">--</span>
+        </div>
+        <button class="btn btn-sm" id="btn-watch" title="加入自选">☆ 加自选</button>
+        <span class="chip" id="stock-market-tag" style="margin-left:auto">A股</span>
+      </div>
+
+      <!-- 实时指标卡 -->
+      <div class="quote-cards" id="quote-cards">
+        <div class="empty-hint">选择股票后显示实时行情</div>
+      </div>
+
+      <!-- 训练进度条 -->
+      <div id="train-progress" class="train-progress hidden">
+        <div class="progress-bar"><div class="progress-fill" id="train-progress-fill"></div></div>
+        <div class="progress-text" id="train-progress-text">准备中…</div>
+        <button class="btn btn-sm" id="btn-cancel-train">取消</button>
+      </div>
+
+      <!-- K 线图 -->
+      <div class="chart-box">
+        <div id="kline" class="kline-chart"></div>
+      </div>
+
+      <!-- ④ 分析卡片 -->
+      <div class="analysis-cards" id="analysis-cards">
+        <div class="card" data-card="rules">
+          <div class="card-title card-title-row"><span class="card-title-text">📐 规则引擎
+              <button class="btn btn-sm btn-info" data-help="rules" title="模块简介">简介</button>
+            </span>
+            <button class="btn btn-sm card-refresh" id="btn-edit-rules" title="编辑规则引擎参数">✏️ 编辑</button>
+          </div>
+          <div class="card-body loading">加载中…</div>
+        </div>
+        <div class="card" data-card="skills">
+          <div class="card-title card-title-row"><span class="card-title-text">📊 技能分析
+              <button class="btn btn-sm btn-info" data-help="skills" title="模块简介">简介</button>
+            </span>
+            <button class="btn btn-sm card-refresh" id="btn-edit-skills" title="编辑技能分析参数">✏️ 编辑</button>
+          </div>
+          <div class="card-body loading">加载中…</div>
+        </div>
+        <div class="card" data-card="llm">
+          <div class="card-title card-title-row"><span class="card-title-text">🧠 LLM 分析
+              <button class="btn btn-sm btn-info" data-help="llm" title="模块简介">简介</button>
+            </span>
+            <button class="btn btn-sm card-refresh" id="btn-llm" title="触发 LLM 深度分析">🧠 分析</button>
+          </div>
+          <div class="card-body loading">点击卡片右上角"分析"按钮触发</div>
+        </div>
+        <div class="card" data-card="rl">
+          <div class="card-title card-title-row"><span class="card-title-text">🎮 RL 分析
+              <button class="btn btn-sm btn-info" data-help="rl" title="模块简介">简介</button>
+            </span>
+            <span class="card-actions">
+              <button class="btn btn-sm card-refresh" id="btn-train" title="训练当前股票的 RL 模型">🎮 训练</button>
+              <button class="btn btn-sm card-refresh" id="btn-refresh-rl" title="重新获取 RL 预测">🔄 刷新</button>
+            </span>
+          </div>
+          <div class="card-body loading">加载中…</div>
+        </div>
+        <div class="card" data-card="fused">
+          <div class="card-title card-title-row"><span class="card-title-text">🔗 综合建议
+              <button class="btn btn-sm btn-info" data-help="fused" title="模块简介">简介</button>
+            </span>
+            <button class="btn btn-sm card-refresh" id="btn-predict" title="三路融合预测">🔗 预测</button>
+          </div>
+          <div class="card-body loading">点击卡片右上角"预测"按钮触发</div>
+        </div>
+      </div>
+      </div><!-- /detail-view -->
+    </section>
+  </div>
+
+  <!-- 规则编辑弹窗 -->
+  <div class="modal-overlay hidden" id="edit-modal">
+    <div class="modal">
+      <div class="modal-header">
+        <span id="edit-modal-title">编辑参数</span>
+        <button class="btn btn-sm" id="btn-modal-close">✕</button>
+      </div>
+      <div class="modal-body" id="edit-modal-body"></div>
+      <div class="modal-footer">
+        <button class="btn btn-outline" id="btn-modal-reset">恢复默认</button>
+        <button class="btn btn-primary" id="btn-modal-save">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- LLM 配置弹窗 -->
+  <div class="modal-overlay hidden" id="llm-modal">
+    <div class="modal">
+      <div class="modal-header">
+        <span>⚙️ LLM 配置</span>
+        <button class="btn btn-sm" id="btn-llm-close">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="edit-field llm-field">
+          <label>API URL<div class="field-desc">OpenAI 兼容接口地址</div></label>
+          <input type="text" id="llm-api-base" placeholder="https://api.deepseek.com">
+        </div>
+        <div class="edit-field llm-field">
+          <label>模型名称<div class="field-desc">如 deepseek-v4-flash</div></label>
+          <input type="text" id="llm-model" placeholder="deepseek-v4-flash">
+        </div>
+        <div class="edit-field llm-field">
+          <label>API Key<div class="field-desc">留空则使用环境变量 DEEPSEEK_API_KEY</div></label>
+          <input type="password" id="llm-api-key" placeholder="sk-...">
+        </div>
+        <div class="edit-field llm-field">
+          <label>LLM 开关<div class="field-desc">关闭后 LLM 分析与聊天走本地增强引擎</div></label>
+          <select id="llm-enabled" class="edit-select">
+            <option value="true">开启</option>
+            <option value="false">关闭</option>
+          </select>
+        </div>
+        <div class="empty-hint hidden" id="llm-test-result"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline" id="btn-llm-test">🔌 测试连接</button>
+        <button class="btn btn-primary" id="btn-llm-save">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 模块说明弹窗（卡片标题 ℹ️ 按钮） -->
+  <div class="modal-overlay hidden" id="help-modal">
+    <div class="modal">
+      <div class="modal-header">
+        <span id="help-modal-title">模块说明</span>
+        <button class="btn btn-sm" id="btn-help-close">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="help-content" id="help-modal-body"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-primary" id="btn-help-ok">知道了</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ ⑤ 聊天框 ═══ -->
+  <footer class="chatbar">
+    <div class="chat-messages" id="chat-messages"></div>
+    <div class="chat-input-row">
+      <input type="text" id="chat-input" placeholder="输入自然语言指令，如：分析茅台 / 对比茅台和五粮液 / 扫描热门…"
+             autocomplete="off">
+      <button class="btn btn-primary" id="btn-send">发送</button>
+    </div>
+  </footer>
+</div>
+
+<script src="vendor/echarts.min.js"></script>
+<script src="js/api.js"></script>
+<script src="js/kline.js"></script>
+<script src="js/cards.js"></script>
+<script src="js/chat.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

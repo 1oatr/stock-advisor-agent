@@ -1,0 +1,167 @@
+# ============================================================================
+# Stock Advisor 全局配置
+# ============================================================================
+
+# ---- 数据源配置 ----
+data:
+  source: "akshare"           # 数据源: akshare / tushare
+  market: "A"                 # A股市场
+  cache_dir: "data/cache"     # 数据缓存目录
+  train_start: "2018-01-01"   # 训练数据起始日期
+  train_end: "2025-06-30"     # 训练数据截止日期
+
+  # 多数据源
+  sources:
+    akshare:
+      enabled: true
+    tushare:
+      enabled: false
+      token: ""               # 需填入 Tushare Token
+
+  # 数据清洗
+  cleaning:
+    remove_suspended: true     # 剔除停牌
+    remove_st: true            # 剔除ST
+    outlier_zscore: 5.0        # 异常值Z-score阈值
+
+  # 因子库
+  factors:
+    enabled_groups:
+      - ma
+      - macd
+      - rsi
+      - momentum
+      - bollinger
+      - atr
+      - volatility
+      - volume_ma
+      - volume_price
+      - price_trend
+      - turnover
+      - kdj
+      - cci
+      - roc
+
+# ---- 热门股票扫描配置 ----
+scanner:
+  top_n: 20                    # 筛选热门股数量
+  min_volume_ratio: 1.5        # 最低量比
+  lookback_days: 20            # 回看天数
+  momentum_days: 5             # 动量计算天数
+
+# ---- 回测引擎配置 ----
+backtest:
+  initial_cash: 1_000_000      # 初始资金
+  commission_rate: 0.00025     # 佣金 万分之2.5
+  stamp_tax_rate: 0.001        # 印花税 千分之一
+  slippage: 0.001              # 滑点 0.1%
+  t_plus_1: true               # T+1 规则
+  main_board_limit: 0.10       # 主板涨跌幅
+  star_limit: 0.20             # 科创板涨跌幅
+  gem_limit: 0.20              # 创业板涨跌幅
+
+# ---- 策略开发配置 ----
+strategy:
+  default: "trend_following"   # 默认策略
+  templates:
+    trend_following:
+      ma_short: 5
+      ma_medium: 20
+      ma_long: 60
+      volume_ratio: 1.5
+
+# ---- RL 强化学习配置 ----
+rl:
+  algorithm: "PPO"             # 算法: PPO / DQN / A2C
+  total_timesteps: 200000      # 总训练步数
+  learning_rate: 0.0003
+  gamma: 0.99                  # 折扣因子
+  gae_lambda: 0.95
+  clip_range: 0.2
+  ent_coef: 0.01               # 熵系数（探索程度）
+  n_steps: 2048
+  batch_size: 64
+  n_epochs: 10
+  model_dir: "models"          # 模型保存目录
+  # 单股训练生命周期
+  hold_min_days: 3             # 最短持仓
+  hold_max_days: 30            # 最长持仓
+  train_data_years: 2          # 训练数据年数
+  update_interval_days: 15     # 增量更新间隔
+  delete_stale_days: 60        # 过期删除天数
+
+# ---- 知识规则引擎配置 ----
+knowledge:
+  rules:
+    trend_ma_short: 5          # 短期均线
+    trend_ma_medium: 20        # 中期均线
+    trend_ma_long: 60           # 长期均线
+    rsi_overbought: 70         # RSI 超买阈值
+    rsi_oversold: 30           # RSI 超卖阈值
+    volume_surge_ratio: 2.0    # 放量倍数
+  llm:
+    enabled: false             # LLM 解释功能开关
+    provider: "deepseek"
+    api_base: "https://api.deepseek.com"
+    model: "deepseek-v4-flash"
+
+# ---- Agent 自主调度配置 ----
+agent:
+  provider: "deepseek"
+  api_base: "https://api.deepseek.com"
+  model: "deepseek-v4-flash"
+  api_key_env: "DEEPSEEK_API_KEY"
+  use_llm: true                 # LLM+Skills 模块默认开关（设为 false 则启动时默认关闭 LLM）
+  max_tool_calls: 5
+  temperature: 0.2
+
+# ---- 决策融合配置（三路融合） ----
+fusion:
+  initial_weights:
+    llm_skills: 0.40           # LLM+Skills 权重（最高，理解全局）
+    rl: 0.30                   # RL 智能体权重
+    rule: 0.30                 # 硬规则权重
+  adapt_window: 20              # 权重自适应窗口
+  high_confidence_threshold: 0.7
+  medium_confidence_threshold: 0.4
+
+  # 凯利公式仓位参数
+  kelly:
+    odds: 4.0                       # 赔率 b = 止盈20% / 止损5%
+    k_high: 0.50                    # 高共识（三路一致）→ 半凯利
+    k_medium: 0.35                  # 中共识（两路一致）→ ≈1/3 凯利
+    k_low: 0.20                     # 低共识（三路分歧）→ 保守
+    max_position: 0.20              # 单标的最大仓位 20%
+    p_min: 0.05                     # 概率下限
+    p_max: 0.95                     # 概率上限
+
+# ---- 决策技能配置 ----
+skills:
+  categories:
+    - "形态识别"
+    - "动量分析"
+    - "趋势分析"
+    - "量价分析"
+    - "波动率分析"
+  default_enabled: true        # 默认启用所有技能
+
+# ---- 风控配置 ----
+risk:
+  max_position_ratio: 0.2       # 单标的最大仓位
+  stop_loss: -0.05              # 止损线 -5%
+  take_profit: 0.20             # 止盈线 20%
+  max_correlation: 0.7          # 最大板块相关性
+  daily_loss_limit: 0.03        # 日亏损限制
+  total_drawdown_limit: 0.15    # 总回撤限制
+  suspend_level: 0.20           # 冻结开仓回撤阈值
+  max_daily_trades: 10          # 日最大交易次数
+
+# ---- 信号/监控配置 ----
+signal:
+  monitor_interval: 60          # 监控轮询间隔（秒）
+  log_dir: "data/logs"          # 日志目录
+
+# ---- 绩效报告配置 ----
+analytics:
+  report_dir: "data/reports"    # 报告目录
+  default_period: "daily"       # 默认报告周期

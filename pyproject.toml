@@ -1,0 +1,24 @@
+[project]
+name = "stock-advisor"
+version = "0.1.0"
+description = "股票建议Agent - 基于强化学习与知识引擎的股票分析决策系统"
+requires-python = ">=3.10"
+dependencies = [
+    "akshare>=1.14.0",
+    "pandas>=2.0.0",
+    "numpy>=1.24.0",
+    "pandas-ta>=0.3.14b0",
+    "gymnasium>=0.29.0",
+    "stable-baselines3>=2.3.0",
+    "torch>=2.0.0",
+    "pyyaml>=6.0",
+    "matplotlib>=3.7.0",
+    "click>=8.1.0",
+    "rich>=13.0.0",
+]
+
+[project.scripts]
+stock-advisor = "src.main:cli"
+
+[tool.setuptools.packages.find]
+where = ["src"]
